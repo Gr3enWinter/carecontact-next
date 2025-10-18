@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import OpenAI from 'openai'
-import { adminClient } from '../../../src/lib/supabaseServer'
+import { adminClient } from '../../../../src/lib/supabaseServer'
 import { revalidatePath } from 'next/cache'
 
 export const runtime = 'nodejs'
