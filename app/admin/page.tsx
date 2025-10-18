@@ -8,7 +8,8 @@ export default function AdminPage(){
   useEffect(() => {
     const t = localStorage.getItem('ADMIN_TOKEN') || ''
     const env = (process.env.NEXT_PUBLIC_ADMIN_TOKEN || '').trim()
-    setOk(!!t && env && t === env)
+    // ensure pure boolean
+    setOk(!!t && !!env && t === env)
   }, [])
 
   function login(e: React.FormEvent<HTMLFormElement>){
@@ -17,19 +18,23 @@ export default function AdminPage(){
     if (token){
       localStorage.setItem('ADMIN_TOKEN', token)
       const env = (process.env.NEXT_PUBLIC_ADMIN_TOKEN || '').trim()
-      setOk(env && token === env)
+      setOk(!!env && token === env)  // ensure pure boolean
     }
   }
 
   async function uploadCsv(e: React.FormEvent<HTMLFormElement>){
     e.preventDefault()
     setMsg(null)
-    const file = (e.currentTarget.elements.namedItem('file') as HTMLInputElement).files?.[0]
-    if(!file) return
+    const input = e.currentTarget.elements.namedItem('file') as HTMLInputElement | null
+    const file = input?.files?.[0]
+    if(!file){ setMsg('No file selected'); return }
     const text = await file.text()
     const res = await fetch('/api/providers/import', {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', 'x-admin-token': localStorage.getItem('ADMIN_TOKEN') || '' },
+      headers: {
+        'Content-Type': 'text/plain',
+        'x-admin-token': localStorage.getItem('ADMIN_TOKEN') || ''
+      },
       body: text
     })
     const json = await res.json()
@@ -47,7 +52,9 @@ export default function AdminPage(){
           </div>
           <button className="btn btn-primary">Continue</button>
         </form>
-        <p className="text-sm text-ink-700 mt-3">Set <code>NEXT_PUBLIC_ADMIN_TOKEN</code> in env, then enter it here once.</p>
+        <p className="text-sm text-ink-700 mt-3">
+          Set <code>NEXT_PUBLIC_ADMIN_TOKEN</code> in env, then enter it here once.
+        </p>
       </div>
     )
   }
@@ -60,7 +67,9 @@ export default function AdminPage(){
           <label>Upload CSV</label>
           <input name="file" type="file" accept=".csv,text/csv" />
         </div>
-        <p className="text-sm text-ink-700">Headers: <code>name,phone,email,address,city,state,zip,website,services,featured</code></p>
+        <p className="text-sm text-ink-700">
+          Headers: <code>name,phone,email,address,city,state,zip,website,services,featured</code>
+        </p>
         <button className="btn btn-primary">Import</button>
       </form>
       {msg ? <div className="card mt-4">{msg}</div> : null}
