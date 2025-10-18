@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { adminClient } from '../src/lib/supabaseServer'
+import { adminClient } from '@/src/lib/supabaseServer'
 const BASE = process.env.NEXT_PUBLIC_SITE_URL || 'https://carecontactdirectory.com'
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supa = adminClient()
