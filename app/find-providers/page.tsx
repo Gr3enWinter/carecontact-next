@@ -1,0 +1,2 @@
+'use client'
+export default function Providers(){return <div className='container py-10'><h1 className='text-3xl font-bold mb-3'>Find Providers</h1><div className='card'>Hook up Supabase and routes (see v1.1 docs).</div></div>}

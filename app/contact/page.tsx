@@ -1,0 +1,1 @@
+export default function Page(){return <div className='container py-10'><h1 className='text-3xl font-bold mb-3'>Contact</h1><p>TODO: Fill in content.</p></div>}

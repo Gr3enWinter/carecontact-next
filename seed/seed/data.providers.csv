@@ -1,0 +1,12 @@
+name,phone,email,address,city,state,zip,website,services,featured
+Comfort Home Care,(518) 555-1010,info@comforthc.com,12 Maple St,Albany,NY,12207,https://comforthc.example,home care|companionship,false
+Albany Senior Helpers,(518) 555-2020,hello@albanyhelpers.com,88 State St,Albany,NY,12207,https://albanyhelpers.example,home care|personal care,false
+Buffalo Assisted Living,(716) 555-1100,contact@baliving.com,500 Elmwood Ave,Buffalo,NY,14222,https://baliving.example,assisted living|memory care,true
+Rochester Memory Care,(585) 555-2200,care@roc-memory.com,23 East Ave,Rochester,NY,14604,https://roc-memory.example,memory care,true
+Syracuse Skilled Nursing,(315) 555-3300,admissions@syrsnf.com,400 Erie Blvd,Syracuse,NY,13202,https://syrsnf.example,skilled nursing,false
+Yonkers Home Aides,(914) 555-4400,team@yonkersaides.com,9 Riverdale Ave,Yonkers,NY,10701,https://yonkersaides.example,home care,false
+Ithaca Respite Center,(607) 555-5500,welcome@ithacarespite.org,100 Cayuga St,Ithaca,NY,14850,https://ithacarespite.example,respite care|adult day,false
+Tampa Senior Choice,(813) 555-6600,info@tampaseniorchoice.com,200 Bayshore Blvd,Tampa,FL,33606,https://tampaseniorchoice.example,assisted living,false
+Orlando Care Partners,(407) 555-7700,contact@orlcarepartners.com,77 Orange Ave,Orlando,FL,32801,https://orlcarepartners.example,home care|transport,false
+Austin Living Well,(512) 555-8800,hello@austinlivingwell.com,321 Congress Ave,Austin,TX,78701,https://austinlivingwell.example,assisted living|home care,true
+Seattle Harbor Home Care,(206) 555-9900,team@seahhc.com,15 Pike St,Seattle,WA,98101,https://seahhc.example,home care,false

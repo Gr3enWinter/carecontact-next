@@ -1,0 +1,1 @@
+export default function BlogIndex(){return <div className='container py-10'><h1 className='text-3xl font-bold mb-3'>Blog</h1><p>Autoposter will populate posts here.</p></div>}

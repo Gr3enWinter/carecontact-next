@@ -1,0 +1,1 @@
+import { NextResponse } from 'next/server';export async function GET(){return NextResponse.json({ok:true, note:'Wire OpenAI + Supabase as in full v1.1'})}

@@ -1,0 +1,1 @@
+export default function Locations(){return <div className='container py-10'><h1 className='text-3xl font-bold mb-3'>Locations</h1><div className='card'>Cities will render here.</div></div>}
