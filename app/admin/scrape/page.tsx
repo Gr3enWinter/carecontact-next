@@ -20,6 +20,7 @@ export default function ScrapeAdmin(){
   const [url, setUrl] = useState('')
   const [data, setData] = useState<Out | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     const t = localStorage.getItem('ADMIN_TOKEN') || ''
@@ -30,12 +31,21 @@ export default function ScrapeAdmin(){
   async function doScrape(e: React.FormEvent){
     e.preventDefault()
     setMsg(null)
+    setData(null)
     const u = url.trim()
-    if(!u) return
-    const res = await fetch(`/api/scrape/provider?url=${encodeURIComponent(u)}`)
-    const json = await res.json()
-    if(!res.ok){ setMsg(json.error || 'Scrape failed'); return }
-    setData(json.data as Out)
+    if(!u){ setMsg('Enter a website URL'); return }
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/scrape/provider?url=${encodeURIComponent(u)}`)
+      const json = await res.json()
+      if(!res.ok){ setMsg(json.error || 'Scrape failed'); return }
+      setData(json.data as Out)
+      setMsg('Scrape complete. Review and Save to providers.')
+    } catch (err: any) {
+      setMsg('Request failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   function update<K extends keyof Out>(k: K, v: Out[K]) {
@@ -70,7 +80,10 @@ export default function ScrapeAdmin(){
           <label>Website URL</label>
           <input placeholder="https://example.com" value={url} onChange={e=>setUrl(e.target.value)} />
         </div>
-        <button className="btn btn-primary">Scrape</button>
+        <button className="btn btn-primary" disabled={loading}>
+          {loading ? 'Scraping…' : 'Scrape'}
+        </button>
+        {msg ? <div className="text-sm text-ink-700">{msg}</div> : null}
       </form>
 
       {data ? (
@@ -129,7 +142,6 @@ export default function ScrapeAdmin(){
             <button type="button" className="btn btn-primary" onClick={save}>Save to providers</button>
             <a className="btn" href="/find-providers">View directory</a>
           </div>
-          {msg ? <div className="text-sm text-ink-700">{msg}</div> : null}
         </div>
       ) : null}
     </div>
