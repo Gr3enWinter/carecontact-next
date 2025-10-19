@@ -41,10 +41,7 @@ export default function ScrapeAdmin() {
   const [history, setHistory] = useState<ScrapeConfig[]>([])
 
   const handleScrape = async () => {
-    if (!config.url) {
-      alert('Please enter a URL')
-      return
-    }
+    if (!config.url) { alert('Please enter a URL'); return }
 
     setLoading(true)
     setResult(null)
@@ -52,34 +49,42 @@ export default function ScrapeAdmin() {
     try {
       const params = new URLSearchParams({
         url: config.url,
-        mode: config.mode,
-        maxPages: config.maxPages.toString(),
-        maxDepth: config.maxDepth.toString(),
-        insert: config.insert.toString()
+        maxPages: String(config.maxPages),
+        maxDepth: String(config.maxDepth),
+        insert: String(config.insert),
       })
 
-      const response = await fetch(`/api/scrape?${params}`, {
-        headers: {
-          'x-admin-token': config.token
-        }
+      const endpoint =
+        config.mode === 'single'
+          ? '/api/scrape/provider'
+          : config.mode === 'directory'
+          ? '/api/scrape/directory'
+          : '/api/scrape/pagination'
+
+      const resp = await fetch(`${endpoint}?${params}`, {
+        headers: config.insert ? { 'x-admin-token': config.token } : undefined,
       })
 
-      const data = await response.json()
-      setResult(data)
-
-      // Add to history
-      if (data.ok) {
-        setHistory(prev => [config, ...prev.slice(0, 9)]) // Keep last 10
+      const ct = resp.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) {
+        const txt = await resp.text()
+        setResult({ ok: false, error: `Non-JSON response (${resp.status}). First bytes: ${txt.slice(0,120)}` })
+        return
       }
-    } catch (error) {
-      setResult({
-        ok: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      })
+
+      const data = await resp.json()
+      setResult(data as any)
+
+      if ((data as any).ok) {
+        setHistory((prev) => [config, ...prev.slice(0, 9)])
+      }
+    } catch (err: any) {
+      setResult({ ok: false, error: err?.message || 'Unknown error' })
     } finally {
       setLoading(false)
     }
   }
+
 
   const loadFromHistory = (historicConfig: ScrapeConfig) => {
     setConfig(historicConfig)
