@@ -1,0 +1,4 @@
+name,phone,email,address,city,state,zip,website,services,featured,logo_url,description
+Comfort Home Care,555-123-4567,info@comforthc.com,12 Main St,Albany,NY,12207,comforthc.com,"home care|companionship",true,https://dummyimage.com/120x120/2563eb/ffffff&text=CH,"Non-medical in‑home care: bathing, dressing, meal prep, and companionship."
+River Assisted Living,555-321-1234,contact@riveral.com,200 Oak Ave,Buffalo,NY,14201,riveral.com,"assisted living|respite",false,https://dummyimage.com/120x120/1e40af/ffffff&text=RA,"Residential assisted living with 24/7 staff, meals, housekeeping, and daily activities."
+Evergreen Memory Care,555-222-1000,hello@evergreenmc.com,55 Pine Rd,Rochester,NY,14604,evergreenmc.com,"memory care|activities",true,https://dummyimage.com/120x120/059669/ffffff&text=EM,"Secure community specializing in dementia care, with small group activities and caregiver support."

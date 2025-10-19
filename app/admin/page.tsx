@@ -8,7 +8,6 @@ export default function AdminPage(){
   useEffect(() => {
     const t = localStorage.getItem('ADMIN_TOKEN') || ''
     const env = (process.env.NEXT_PUBLIC_ADMIN_TOKEN || '').trim()
-    // ensure pure boolean
     setOk(!!t && !!env && t === env)
   }, [])
 
@@ -18,7 +17,7 @@ export default function AdminPage(){
     if (token){
       localStorage.setItem('ADMIN_TOKEN', token)
       const env = (process.env.NEXT_PUBLIC_ADMIN_TOKEN || '').trim()
-      setOk(!!env && token === env)  // ensure pure boolean
+      setOk(!!env && token === env)
     }
   }
 
@@ -31,10 +30,7 @@ export default function AdminPage(){
     const text = await file.text()
     const res = await fetch('/api/providers/import', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-        'x-admin-token': localStorage.getItem('ADMIN_TOKEN') || ''
-      },
+      headers: { 'Content-Type': 'text/plain', 'x-admin-token': localStorage.getItem('ADMIN_TOKEN') || '' },
       body: text
     })
     const json = await res.json()
@@ -52,9 +48,7 @@ export default function AdminPage(){
           </div>
           <button className="btn btn-primary">Continue</button>
         </form>
-        <p className="text-sm text-ink-700 mt-3">
-          Set <code>NEXT_PUBLIC_ADMIN_TOKEN</code> in env, then enter it here once.
-        </p>
+        <p className="text-sm text-ink-700 mt-3">Set <code>NEXT_PUBLIC_ADMIN_TOKEN</code> in env, then enter it here once.</p>
       </div>
     )
   }
@@ -68,7 +62,9 @@ export default function AdminPage(){
           <input name="file" type="file" accept=".csv,text/csv" />
         </div>
         <p className="text-sm text-ink-700">
-          Headers: <code>name,phone,email,address,city,state,zip,website,services,featured</code>
+          Headers:&nbsp;
+          <code>name,phone,email,address,city,state,zip,website,services,featured,logo_url,description</code><br />
+          Put multi-sentence descriptions in quotes to handle commas.
         </p>
         <button className="btn btn-primary">Import</button>
       </form>
