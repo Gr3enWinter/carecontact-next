@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import * as cheerio from 'cheerio'
-import { adminClient } from '../../../src/lib/supabaseServer'
+import { adminClient } from '../../../../src/lib/supabaseServer'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
