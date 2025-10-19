@@ -1,149 +1,385 @@
+// app/admin/scrape/page.tsx
 'use client'
-import { useEffect, useState } from 'react'
 
-type Out = {
-  name?: string
-  website?: string
-  phone?: string | null
-  email?: string | null
-  address?: string | null
-  city?: string | null
-  state?: string | null
-  zip?: string | null
-  services?: string | null
-  logo_url?: string | null
-  description?: string | null
+import { useState } from 'react'
+
+interface ScrapeResultSuccess {
+  ok: true
+  data: any
+  meta?: any
+  saved?: boolean
 }
 
-export default function ScrapeAdmin(){
-  const [ok, setOk] = useState(false)
-  const [url, setUrl] = useState('')
-  const [data, setData] = useState<Out | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
+interface ScrapeResultError {
+  ok: false
+  error: string
+}
+
+type ScrapeResult = ScrapeResultSuccess | ScrapeResultError
+
+interface ScrapeConfig {
+  url: string
+  mode: 'single' | 'directory' | 'pagination'
+  maxPages: number
+  maxDepth: number
+  insert: boolean
+  token: string
+}
+
+export default function ScrapeAdmin() {
+  const [config, setConfig] = useState<ScrapeConfig>({
+    url: '',
+    mode: 'single',
+    maxPages: 10,
+    maxDepth: 2,
+    insert: false,
+    token: ''
+  })
+
+  const [result, setResult] = useState<ScrapeResult | null>(null)
   const [loading, setLoading] = useState(false)
+  const [history, setHistory] = useState<ScrapeConfig[]>([])
 
-  useEffect(() => {
-    const t = localStorage.getItem('ADMIN_TOKEN') || ''
-    const env = (process.env.NEXT_PUBLIC_ADMIN_TOKEN || '').trim()
-    setOk(!!t && !!env && t === env)
-  }, [])
+  const handleScrape = async () => {
+    if (!config.url) {
+      alert('Please enter a URL')
+      return
+    }
 
-  async function doScrape(e: React.FormEvent){
-    e.preventDefault()
-    setMsg(null)
-    setData(null)
-    const u = url.trim()
-    if(!u){ setMsg('Enter a website URL'); return }
     setLoading(true)
+    setResult(null)
+
     try {
-      const res = await fetch(`/api/scrape/provider?url=${encodeURIComponent(u)}`)
-      const json = await res.json()
-      if(!res.ok){ setMsg(json.error || 'Scrape failed'); return }
-      setData(json.data as Out)
-      setMsg('Scrape complete. Review and Save to providers.')
-    } catch (err: any) {
-      setMsg('Request failed')
+      const params = new URLSearchParams({
+        url: config.url,
+        mode: config.mode,
+        maxPages: config.maxPages.toString(),
+        maxDepth: config.maxDepth.toString(),
+        insert: config.insert.toString()
+      })
+
+      const response = await fetch(`/api/scrape?${params}`, {
+        headers: {
+          'x-admin-token': config.token
+        }
+      })
+
+      const data = await response.json()
+      setResult(data)
+
+      // Add to history
+      if (data.ok) {
+        setHistory(prev => [config, ...prev.slice(0, 9)]) // Keep last 10
+      }
+    } catch (error) {
+      setResult({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  function update<K extends keyof Out>(k: K, v: Out[K]) {
-    setData(prev => prev ? { ...prev, [k]: v } : prev)
+  const loadFromHistory = (historicConfig: ScrapeConfig) => {
+    setConfig(historicConfig)
   }
 
-  async function save(){
-    if(!data) return
-    setMsg('Saving…')
-    const t = localStorage.getItem('ADMIN_TOKEN') || ''
-    const res = await fetch(`/api/scrape/provider?url=${encodeURIComponent(data.website || url)}&insert=true`, {
-      headers: { 'x-admin-token': t }
-    })
-    const json = await res.json()
-    setMsg(res.ok ? 'Saved to providers' : `Error: ${json.error || 'failed'}`)
-  }
-
-  if(!ok){
-    return (
-      <div className="container py-10 max-w-lg">
-        <h1 className="text-2xl font-bold mb-3">Admin: Scrape Provider</h1>
-        <p className="text-sm text-ink-700">Go to <a className="btn" href="/admin">/admin</a> and enter your token first.</p>
-      </div>
-    )
-  }
+  const presetExamples = [
+    {
+      name: 'Single Provider',
+      config: {
+        url: 'https://example-senior-care.com',
+        mode: 'single' as const,
+        maxPages: 1,
+        maxDepth: 1,
+        insert: false,
+        token: ''
+      }
+    },
+    {
+      name: 'Provider Directory',
+      config: {
+        url: 'https://communitycare.com/practices/',
+        mode: 'directory' as const,
+        maxPages: 5,
+        maxDepth: 2,
+        insert: false,
+        token: ''
+      }
+    },
+    {
+      name: 'Paginated List',
+      config: {
+        url: 'https://homehealth-agencies.com/list',
+        mode: 'pagination' as const,
+        maxPages: 3,
+        maxDepth: 1,
+        insert: false,
+        token: ''
+      }
+    }
+  ]
 
   return (
-    <div className="container py-10 max-w-3xl">
-      <h1 className="text-2xl font-bold mb-3">Scrape Provider</h1>
-      <form onSubmit={doScrape} className="card space-y-3">
-        <div>
-          <label>Website URL</label>
-          <input placeholder="https://example.com" value={url} onChange={e=>setUrl(e.target.value)} />
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Website Scraper Admin</h1>
+          <p className="text-gray-600 mt-2">Extract provider information from websites</p>
         </div>
-        <button className="btn btn-primary" disabled={loading}>
-          {loading ? 'Scraping…' : 'Scrape'}
-        </button>
-        {msg ? <div className="text-sm text-ink-700">{msg}</div> : null}
-      </form>
 
-      {data ? (
-        <div className="card mt-4 space-y-3">
-          <div className="flex gap-3 items-center">
-            {data.logo_url ? <img src={data.logo_url} alt="" className="w-14 h-14 rounded-xl border object-cover" /> : null}
-            <input value={data.name || ''} onChange={e=>update('name', e.target.value)} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Configuration Panel */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Main Config Card */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-semibold mb-4">Scraping Configuration</h2>
+              
+              {/* URL Input */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Website URL *
+                </label>
+                <input
+                  type="url"
+                  value={config.url}
+                  onChange={(e) => setConfig(prev => ({ ...prev, url: e.target.value }))}
+                  placeholder="https://example.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Mode Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Scraping Mode
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'single', label: 'Single Page', desc: 'One website' },
+                    { value: 'directory', label: 'Directory', desc: 'Multiple providers' },
+                    { value: 'pagination', label: 'Pagination', desc: 'Multiple pages' }
+                  ].map((mode) => (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      onClick={() => setConfig(prev => ({ ...prev, mode: mode.value as any }))}
+                      className={`p-3 border rounded-md text-left ${
+                        config.mode === mode.value
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="font-medium">{mode.label}</div>
+                      <div className="text-sm text-gray-500">{mode.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Advanced Settings */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Max Pages
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={config.maxPages}
+                    onChange={(e) => setConfig(prev => ({ ...prev, maxPages: parseInt(e.target.value) || 1 }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Max Depth
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={config.maxDepth}
+                    onChange={(e) => setConfig(prev => ({ ...prev, maxDepth: parseInt(e.target.value) || 1 }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Insert Settings */}
+              <div className="mb-6">
+                <div className="flex items-center mb-4">
+                  <input
+                    type="checkbox"
+                    id="insert"
+                    checked={config.insert}
+                    onChange={(e) => setConfig(prev => ({ ...prev, insert: e.target.checked }))}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="insert" className="ml-2 block text-sm text-gray-900">
+                    Save to database
+                  </label>
+                </div>
+
+                {config.insert && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Admin Token *
+                    </label>
+                    <input
+                      type="password"
+                      value={config.token}
+                      onChange={(e) => setConfig(prev => ({ ...prev, token: e.target.value }))}
+                      placeholder="Enter admin token"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleScrape}
+                  disabled={loading || !config.url}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Scraping...' : 'Start Scraping'}
+                </button>
+                
+                <button
+                  onClick={() => setConfig({
+                    url: '',
+                    mode: 'single',
+                    maxPages: 10,
+                    maxDepth: 2,
+                    insert: false,
+                    token: ''
+                  })}
+                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            {/* Results Panel */}
+            {result && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-xl font-semibold mb-4">
+                  {result.ok ? (
+                    <>Results {result.meta?.count && `(${result.meta.count} providers)`}</>
+                  ) : (
+                    'Scraping Error'
+                  )}
+                </h2>
+                
+                {!result.ok ? (
+                  <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                    <div className="text-red-800 font-medium">Error</div>
+                    <div className="text-red-600 mt-1">{result.error}</div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {result.saved && (
+                      <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                        <div className="text-green-800 font-medium">Successfully saved to database!</div>
+                      </div>
+                    )}
+                    
+                    <div className="border border-gray-200 rounded-md">
+                      <pre className="p-4 overflow-auto max-h-96 text-sm">
+                        {JSON.stringify(result.data, null, 2)}
+                      </pre>
+                    </div>
+
+                    {result.meta && (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="bg-gray-50 p-3 rounded">
+                          <div className="text-gray-500">Mode</div>
+                          <div className="font-medium">{result.meta.mode}</div>
+                        </div>
+                        {result.meta.confidence && (
+                          <div className="bg-gray-50 p-3 rounded">
+                            <div className="text-gray-500">Confidence</div>
+                            <div className="font-medium">{result.meta.confidence}%</div>
+                          </div>
+                        )}
+                        {result.meta.count && (
+                          <div className="bg-gray-50 p-3 rounded">
+                            <div className="text-gray-500">Providers</div>
+                            <div className="font-medium">{result.meta.count}</div>
+                          </div>
+                        )}
+                        <div className="bg-gray-50 p-3 rounded">
+                          <div className="text-gray-500">Time</div>
+                          <div className="font-medium">{new Date(result.meta.timestamp).toLocaleTimeString()}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label>Website</label>
-              <input value={data.website || ''} onChange={e=>update('website', e.target.value)} />
-            </div>
-            <div>
-              <label>Phone</label>
-              <input value={data.phone || ''} onChange={e=>update('phone', e.target.value)} />
-            </div>
-            <div>
-              <label>Email</label>
-              <input value={data.email || ''} onChange={e=>update('email', e.target.value)} />
-            </div>
-            <div>
-              <label>Services (pipe-separated)</label>
-              <input value={data.services || ''} onChange={e=>update('services', e.target.value)} />
-            </div>
-            <div>
-              <label>Address</label>
-              <input value={data.address || ''} onChange={e=>update('address', e.target.value)} />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label>City</label>
-                <input value={data.city || ''} onChange={e=>update('city', e.target.value)} />
-              </div>
-              <div>
-                <label>State</label>
-                <input value={data.state || ''} onChange={e=>update('state', e.target.value)} />
-              </div>
-              <div>
-                <label>ZIP</label>
-                <input value={data.zip || ''} onChange={e=>update('zip', e.target.value)} />
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Preset Examples */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="font-semibold mb-3">Quick Examples</h3>
+              <div className="space-y-2">
+                {presetExamples.map((example, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setConfig(prev => ({ ...prev, ...example.config }))}
+                    className="w-full text-left p-3 border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <div className="font-medium text-sm">{example.name}</div>
+                    <div className="text-xs text-gray-500 truncate">{example.config.url}</div>
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="md:col-span-2">
-              <label>Logo URL</label>
-              <input value={data.logo_url || ''} onChange={e=>update('logo_url', e.target.value)} />
-            </div>
-            <div className="md:col-span-2">
-              <label>Description</label>
-              <textarea rows={4} value={data.description || ''} onChange={e=>update('description', e.target.value)} />
-            </div>
-          </div>
 
-          <div className="flex gap-2">
-            <button type="button" className="btn btn-primary" onClick={save}>Save to providers</button>
-            <a className="btn" href="/find-providers">View directory</a>
+            {/* History */}
+            {history.length > 0 && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="font-semibold mb-3">Recent Scrapes</h3>
+                <div className="space-y-2">
+                  {history.map((historicConfig, index) => (
+                    <button
+                      key={index}
+                      onClick={() => loadFromHistory(historicConfig)}
+                      className="w-full text-left p-3 border border-gray-200 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <div className="font-medium text-sm truncate">{historicConfig.url}</div>
+                      <div className="text-xs text-gray-500 capitalize">
+                        {historicConfig.mode} • {historicConfig.maxPages} pages
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Help & Tips */}
+            <div className="bg-blue-50 rounded-lg p-6">
+              <h3 className="font-semibold text-blue-900 mb-3">Scraping Tips</h3>
+              <ul className="text-sm text-blue-800 space-y-2">
+                <li>• <strong>Single Mode</strong>: Best for individual provider websites</li>
+                <li>• <strong>Directory Mode</strong>: For pages listing multiple providers</li>
+                <li>• <strong>Pagination Mode</strong>: For multi-page lists with next buttons</li>
+                <li>• Start with small max pages/depth to test</li>
+                <li>• Use directory mode for sites like communitycare.com/practices/</li>
+              </ul>
+            </div>
           </div>
         </div>
-      ) : null}
+      </div>
     </div>
   )
 }
