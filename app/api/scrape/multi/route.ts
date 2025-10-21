@@ -31,6 +31,7 @@ type Clinician = {
   role?: string | null
   profile_url: string
   photo_url?: string | null
+  // enriched
   specialties?: string[] | null
   languages?: string[] | null
   accepting_new_patients?: boolean | null
@@ -76,7 +77,7 @@ async function fetchWithTimeout(url: string, timeout = 12000) {
     const res = await fetch(url, {
       signal: ctrl.signal,
       headers: { 'User-Agent': UA },
-      redirect: 'follow'
+      redirect: 'follow',
     })
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
     return await res.text()
@@ -117,61 +118,112 @@ function pullFirstPhone($: cheerio.CheerioAPI) {
   return m ? normalizePhoneText(m[0]) : null
 }
 
-// ------------ Directory filters ------------
-const DENY_PATHS = [
-  '/practices/',
-  '/featured-practices/',
-  '/healthparks/',
-  '/what-we-offer/',
-  '/about/',
-  '/about/insurance/',
-  '/about/financial-policy/',
-  '/doctors/',
-  '/news',
-  '/events'
-]
+// ------------ Directory link discovery (robust) ------------
+function collectPracticeLinksFromDirectory($: cheerio.CheerioAPI, base: string) {
+  const found = new Set<string>()
+  const seenHrefs: string[] = []
 
-function isDenied(u: URL) {
-  const p = u.pathname.replace(/\/+$/, '/')
-  return DENY_PATHS.some((d) => p === d || p.startsWith(d))
-}
+  // Pass 1: strict – exactly what we expect
+  $('a[href]').each((_, a) => {
+    const href = ($(a).attr('href') || '').trim()
+    if (!href) return
+    seenHrefs.push(href)
 
-function pageLooksLikePractice($: cheerio.CheerioAPI) {
-  const h1 = $('h1').first().text().trim().toLowerCase()
-  if (/find a doctor|find a practice|featured|health park|news|events/.test(h1)) return false
-  const body = $('body').text()
-  const hasPhone = /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(body)
-  const hasAddress = /\b\d{2,5}\s+\w+/.test(body) && /ny|new york/i.test(body)
-  return hasPhone || hasAddress
-}
-
-// ------------ Link discovery ------------
-function collectPracticeLinksFromDirectory($: cheerio.CheerioAPI, base: string): string[] {
-  const out = new Set<string>()
-
-  // Prefer grids/lists of practices
-  $('[class*="practice"], .practices, .practice-list, .cards, .wp-block-post-template')
-    .find('a[href*="/practices/"]')
-    .each((_, a) => {
-      const href = $(a).attr('href') || ''
-      try {
-        const u = new URL(href, base)
-        const path = u.pathname.replace(/\/+$/, '/')
-        if (path.startsWith('/practices/') && path !== '/practices/') out.add(u.toString())
-      } catch {}
-    })
-
-  // Fallback: any anchor with the shape /practices/<slug>/
-  $('a[href*="/practices/"]').each((_, a) => {
-    const href = $(a).attr('href') || ''
+    let u: URL | null = null
     try {
-      const u = new URL(href, base)
-      const parts = u.pathname.split('/').filter(Boolean)
-      if (parts[0] === 'practices' && parts.length >= 2) out.add(u.toString())
+      u = new URL(href, base)
     } catch {}
+    if (!u) return
+
+    const path = u.pathname.replace(/\/+$/, '/')
+    const isPracticeDetail = path.startsWith('/practices/') && path !== '/practices/'
+    if (isPracticeDetail && /^https?:$/.test(u.protocol)) found.add(u.toString())
   })
 
-  return Array.from(out).filter((href) => !isDenied(new URL(href)))
+  // Pass 2: lenient – any href containing "/practices/"
+  if (found.size === 0) {
+    $('a[href*="/practices/"]').each((_, a) => {
+      const href = ($(a).attr('href') || '').trim()
+      let u: URL | null = null
+      try {
+        u = new URL(href, base)
+      } catch {}
+      if (u && /^https?:$/.test(u.protocol)) found.add(u.toString())
+    })
+  }
+
+  // Pass 3: some sites stash URLs in data-* attrs
+  if (found.size === 0) {
+    $('[data-href*="/practices/"], [data-url*="/practices/"]').each((_, el) => {
+      const href = ($(el).attr('data-href') || $(el).attr('data-url') || '').trim()
+      let u: URL | null = null
+      try {
+        u = new URL(href, base)
+      } catch {}
+      if (u && /^https?:$/.test(u.protocol)) found.add(u.toString())
+    })
+  }
+
+  // Pass 4: fallback – regex scan of raw HTML
+  if (found.size === 0) {
+    const html = $.root().html() || ''
+    const re = /href\s*=\s*"(.*?)"/gi
+    let m: RegExpExecArray | null
+    while ((m = re.exec(html))) {
+      const href = (m[1] || '').trim()
+      if (!/\/practices\//.test(href)) continue
+      try {
+        const u = new URL(href, base)
+        if (/^https?:$/.test(u.protocol)) found.add(u.toString())
+      } catch {}
+    }
+  }
+
+  return {
+    links: Array.from(found),
+    hrefSample: seenHrefs.slice(0, 20),
+  }
+}
+
+// ------------ Sitemap fallback ------------
+async function fetchSitemapPracticeLinks(baseUrl: string): Promise<string[]> {
+  const origin = new URL(baseUrl).origin
+  const candidates = [
+    `${origin}/sitemap.xml`,
+    `${origin}/sitemap_index.xml`,
+    `${origin}/practices-sitemap.xml`,
+  ]
+
+  const seen = new Set<string>()
+
+  for (const url of candidates) {
+    try {
+      const xml = await fetchWithTimeout(url, 10000)
+      const locMatches = Array.from(xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi))
+      for (const m of locMatches) {
+        const loc = (m[1] || '').trim()
+        if (!loc) continue
+        if (/\/practices\/[^\/]+\/?$/i.test(loc)) seen.add(loc)
+      }
+
+      // Handle index-of-sitemaps (WordPress / Yoast style)
+      const childMaps = Array.from(xml.matchAll(/<sitemap>[\s\S]*?<loc>\s*([^<]+)\s*<\/loc>[\s\S]*?<\/sitemap>/gi))
+      for (const cm of childMaps) {
+        const childUrl = (cm[1] || '').trim()
+        if (!childUrl) continue
+        try {
+          const childXml = await fetchWithTimeout(childUrl, 10000)
+          const childLocs = Array.from(childXml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi))
+          for (const m of childLocs) {
+            const loc = (m[1] || '').trim()
+            if (/\/practices\/[^\/]+\/?$/i.test(loc)) seen.add(loc)
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  return Array.from(seen)
 }
 
 // ------------ Page parsers ------------
@@ -194,7 +246,7 @@ function extractMeta($: cheerio.CheerioAPI, baseUrl: string) {
     $('link[rel="icon"][sizes="32x32"]').attr('href'),
     $('link[rel="icon"][sizes="16x16"]').attr('href'),
     $('link[rel="apple-touch-icon"]').attr('href'),
-    $('link[rel="icon"]').attr('href')
+    $('link[rel="icon"]').attr('href'),
   ].map((x) => abs(baseUrl, x))
   const logo = logoCandidates.find(Boolean) || null
 
@@ -228,7 +280,7 @@ function extractMeta($: cheerio.CheerioAPI, baseUrl: string) {
     description,
     logo: jsonldImage || logo,
     addressBlock: jsonldAddr,
-    phone: jsonldPhone
+    phone: jsonldPhone,
   }
 }
 
@@ -274,7 +326,7 @@ function extractCliniciansFromPractice(
       profile_url: profile,
       photo_url: upgradeWpThumb(photo),
       source_url: profile,
-      last_seen_at: new Date().toISOString()
+      last_seen_at: new Date().toISOString(),
     })
   }
 
@@ -287,7 +339,8 @@ function extractCliniciansFromPractice(
 
     const card = $a.closest('article, .card, .provider, .team-member, li, .grid-item, .wp-block-column')
     const name = (card.find('h3,h4,.name').first().text() || t || '').trim()
-    const role = (card.find('.role,.title,.specialty,.credentials').first().text() || '').trim() || null
+    const role =
+      (card.find('.role,.title,.specialty,.credentials').first().text() || '').trim() || null
 
     let photo: string | null = null
     const img = card.find('img').first()
@@ -315,11 +368,11 @@ function extractCliniciansFromPractice(
       if (!text || /find a doctor/i.test(text)) return
 
       let photo: string | null = null
-      const IMG = $a.find('img').first().length
+      const img = $a.find('img').first().length
         ? $a.find('img').first()
         : $a.closest('li,article,.card,.team-member').find('img').first()
-      if (IMG.length) {
-        const src = IMG.attr('data-src') || IMG.attr('src') || ''
+      if (img.length) {
+        const src = img.attr('data-src') || img.attr('src') || ''
         if (src) {
           try {
             photo = new URL(src, baseUrl).toString()
@@ -333,17 +386,20 @@ function extractCliniciansFromPractice(
   return uniqueBy(people, (p) => `${p.practice_slug}::${p.slug}`)
 }
 
+// enrich one clinician by fetching their profile page
 async function enrichClinicianFromProfile(c: Clinician): Promise<Clinician> {
   try {
     const html = await fetchWithTimeout(c.profile_url, 10000)
     const $ = cheerio.load(html)
 
+    // role / credentials
     const credsText =
       $('.credentials,.provider-credentials,.title,.role').first().text().trim() ||
       $('h1 + .subtitle, h1 + .meta').first().text().trim() ||
       c.role ||
       null
 
+    // specialties
     const spec = new Set<string>()
     $('[class*="specialt"], .specialties, .provider-specialties, li').each((_, el) => {
       const t = $(el).text().trim()
@@ -352,6 +408,7 @@ async function enrichClinicianFromProfile(c: Clinician): Promise<Clinician> {
       }
     })
 
+    // languages
     const langs = new Set<string>()
     $('[class*="language"], .languages, .provider-languages').each((_, el) => {
       $(el)
@@ -359,14 +416,20 @@ async function enrichClinicianFromProfile(c: Clinician): Promise<Clinician> {
         .split(/[•,\/]/)
         .forEach((s) => {
           const t = s.trim()
-          if (/english|spanish|chinese|mandarin|cantonese|russian|arabic|french|hindi|italian|portuguese|korean|vietnamese/i.test(t)) {
+          if (
+            /english|spanish|chinese|mandarin|cantonese|russian|arabic|french|hindi|italian|portuguese|korean|vietnamese/i.test(
+              t
+            )
+          ) {
             langs.add(t)
           }
         })
     })
 
+    // accepting new patients
     const accepting = /accepting\s+new\s+patients/i.test($('body').text())
 
+    // booking link
     let booking: string | null = null
     $('a[href]').each((_, a) => {
       const href = $(a).attr('href') || ''
@@ -378,6 +441,7 @@ async function enrichClinicianFromProfile(c: Clinician): Promise<Clinician> {
       }
     })
 
+    // education / training / boards
     const edu: string[] = []
     $('h2,h3').each((_, h) => {
       const head = $(h).text().toLowerCase()
@@ -402,38 +466,30 @@ async function enrichClinicianFromProfile(c: Clinician): Promise<Clinician> {
       booking_url: booking,
       education_training: edu.slice(0, 20),
       source_url: c.profile_url,
-      last_seen_at: new Date().toISOString()
+      last_seen_at: new Date().toISOString(),
     }
   } catch {
     return {
       ...c,
       photo_url: upgradeWpThumb(c.photo_url),
       source_url: c.profile_url,
-      last_seen_at: new Date().toISOString()
+      last_seen_at: new Date().toISOString(),
     }
   }
 }
 
-// Prefer H1 for name, strip brand, keep only likely practice pages
 function extractPractice(practiceUrl: string, $: cheerio.CheerioAPI): Practice {
   const meta = extractMeta($, practiceUrl)
-  const h1 = $('h1').first().text().trim() || meta.title || ''
-  const cleanedName =
-    h1
-      .replace(/\s+•\s*Community Care Physicians.*$/i, '')
-      .replace(/Community Care Physicians\s*-\s*/i, '')
-      .replace(/\s*\|\s*Community Care Physicians.*$/i, '')
-      .trim() || null
+  const slug =
+    slugify(new URL(practiceUrl).pathname.split('/').filter(Boolean).slice(-1)[0] || meta.title || practiceUrl)
 
+  const name = cleanTitle(meta.title) || null
   const phone = meta.phone || pullFirstPhone($)
   const { address, city, state, zip } = addressFromLD(meta.addressBlock)
 
-  const pathSlug = new URL(practiceUrl).pathname.split('/').filter(Boolean).slice(-1)[0]
-  const slug = slugify(pathSlug || cleanedName || practiceUrl)
-
   return {
     slug,
-    name: cleanedName,
+    name,
     website: practiceUrl,
     phone: phone || null,
     email: null,
@@ -443,20 +499,14 @@ function extractPractice(practiceUrl: string, $: cheerio.CheerioAPI): Practice {
     zip: zip || null,
     logo_url: meta.logo || null,
     description: meta.description || null,
-    source: 'crawl'
+    source: 'crawl',
   }
 }
 
-// Parse one practice page with guards
+// ------------ Parser for each practice page ------------
 async function parsePracticePage(practiceUrl: string) {
-  const u = new URL(practiceUrl)
-  if (isDenied(u)) return null
-
   const html = await fetchWithTimeout(practiceUrl)
   const $ = cheerio.load(html)
-
-  if (!pageLooksLikePractice($)) return null
-
   const practice = extractPractice(practiceUrl, $)
   const cliniciansRaw = extractCliniciansFromPractice($, practiceUrl, practice.slug)
   const clinicians = await Promise.all(cliniciansRaw.map(enrichClinicianFromProfile))
@@ -470,9 +520,11 @@ export async function GET(req: Request) {
   const maxPages = Math.max(1, Math.min(100, Number(searchParams.get('maxPages') || 25)))
   const insert = (searchParams.get('insert') || 'false').toLowerCase() === 'true'
   const scope: ModeScope = (searchParams.get('scope') as ModeScope) || 'both'
+  const debug = (searchParams.get('debug') || '') === '1'
 
   if (!baseUrl) return NextResponse.json({ ok: false, error: 'Missing url' }, { status: 400 })
 
+  // if writing, require admin token
   if (insert) {
     const token = req.headers.get('x-admin-token') || ''
     const expected = (process.env.NEXT_PUBLIC_ADMIN_TOKEN || '').trim()
@@ -482,27 +534,45 @@ export async function GET(req: Request) {
   }
 
   try {
+    // collect practice links from directory page
     const dirHtml = await fetchWithTimeout(baseUrl)
     const $dir = cheerio.load(dirHtml)
-    const practiceLinks = collectPracticeLinksFromDirectory($dir, baseUrl).slice(0, maxPages)
+    const discovered = collectPracticeLinksFromDirectory($dir, baseUrl)
+
+    let practiceLinks = discovered.links
+    // fallback to sitemap if nothing found
+    let usedSitemap = false
+    if (practiceLinks.length === 0) {
+      const sitemapLinks = await fetchSitemapPracticeLinks(baseUrl)
+      if (sitemapLinks.length) {
+        usedSitemap = true
+        practiceLinks = sitemapLinks
+      }
+    }
+
+    // limit and sort for stability
+    practiceLinks = Array.from(new Set(practiceLinks)).slice(0, maxPages).sort()
 
     const results: CrawlResult = { practices: [], clinicians: [] }
 
     for (const link of practiceLinks) {
-      const parsed = await parsePracticePage(link)
-      if (!parsed) continue
-      const { practice, clinicians } = parsed
+      const pth = new URL(link).pathname.replace(/\/+$/, '/')
+      if (pth === '/practices/') continue
+
+      const { practice, clinicians } = await parsePracticePage(link)
       if (scope !== 'clinicians') results.practices.push(practice)
       if (scope !== 'practices') results.clinicians.push(...clinicians)
     }
 
+    // de-dupe
     results.practices = uniqueBy(results.practices, (p) => p.slug)
     results.clinicians = uniqueBy(results.clinicians, (c) => `${c.practice_slug}::${c.slug}`)
 
+    // ---------- Non-destructive upserts ----------
     if (insert) {
       const supa = adminClient()
 
-      // Upsert practices (non-destructive merge)
+      // practices
       if (scope !== 'clinicians' && results.practices.length) {
         const slugs = results.practices.map((p) => p.slug)
         const { data: existing } = await supa.from('providers').select('*').in('slug', slugs)
@@ -520,7 +590,7 @@ export async function GET(req: Request) {
             state: p.state ?? old.state ?? null,
             zip: p.zip ?? old.zip ?? null,
             logo_url: p.logo_url ?? old.logo_url ?? null,
-            description: p.description ?? old.description ?? null
+            description: p.description ?? old.description ?? null,
           }
         })
 
@@ -528,9 +598,10 @@ export async function GET(req: Request) {
         if (upErr) return NextResponse.json({ ok: false, error: upErr.message }, { status: 500 })
       }
 
-      // Upsert clinicians
+      // clinicians
       if (scope !== 'practices' && results.clinicians.length) {
         const keys = results.clinicians.map((c) => [c.practice_slug, c.slug])
+        // fetch existing rows to merge
         const { data: existingC } = await supa
           .from('clinicians')
           .select('*')
@@ -553,7 +624,7 @@ export async function GET(req: Request) {
             booking_url: c.booking_url ?? old.booking_url ?? null,
             education_training: c.education_training ?? old.education_training ?? null,
             source_url: c.source_url ?? old.source_url ?? null,
-            last_seen_at: c.last_seen_at ?? old.last_seen_at ?? new Date().toISOString()
+            last_seen_at: c.last_seen_at ?? old.last_seen_at ?? new Date().toISOString(),
           }
         })
 
@@ -572,10 +643,20 @@ export async function GET(req: Request) {
         scope,
         counts: {
           practices: results.practices.length,
-          clinicians: results.clinicians.length
+          clinicians: results.clinicians.length,
         },
-        timestamp: new Date().toISOString()
-      }
+        timestamp: new Date().toISOString(),
+        ...(debug
+          ? {
+              debug: {
+                usedSitemap,
+                linkCount: practiceLinks.length,
+                foundLinksSample: practiceLinks.slice(0, 10),
+                hrefSample: discovered.hrefSample,
+              },
+            }
+          : {}),
+      },
     })
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err?.message || 'Scrape failed' }, { status: 500 })
