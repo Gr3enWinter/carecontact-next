@@ -2,15 +2,28 @@
 import { createClient } from '@supabase/supabase-js'
 import ClinicianCard, { Clinician } from '../../src/components/ClinicianCard'
 
-export const revalidate = 60
-export const dynamic = 'force-static'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// render at request time so we don't need env vars at build
+export const dynamic = 'force-dynamic'
 
 export default async function CliniciansPage() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon) {
+    // Friendly message if envs aren’t set yet
+    return (
+      <div className="container py-10">
+        <h1 className="text-2xl font-bold">Clinicians</h1>
+        <p className="mt-2 text-slate-600">
+          Supabase environment variables are missing. Set
+          {' '}<code>NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
+          <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+        </p>
+      </div>
+    )
+  }
+
+  const supabase = createClient(url, anon)
+
   const { data, error } = await supabase
     .from('clinicians')
     .select(
@@ -20,11 +33,7 @@ export default async function CliniciansPage() {
     .limit(60)
 
   if (error) {
-    return (
-      <div className="container py-10">
-        Error: {error.message}
-      </div>
-    )
+    return <div className="container py-10">Error: {error.message}</div>
   }
 
   return (

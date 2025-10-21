@@ -4,11 +4,6 @@ import ClinicianCard, { Clinician } from '../../../src/components/ClinicianCard'
 
 export const dynamic = 'force-dynamic'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 function formatPhone(p?: string | null) {
   if (!p) return null
   const digits = p.replace(/\D/g, '')
@@ -21,7 +16,18 @@ export default async function ProviderDetail({
 }: {
   params: { slug: string }
 }) {
-  // 1) Provider/practice record
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon) {
+    return (
+      <div className="container py-10">
+        Provider not found (missing Supabase env vars).
+      </div>
+    )
+  }
+
+  const supabase = createClient(url, anon)
+
   const { data: provider, error: pErr } = await supabase
     .from('providers')
     .select('*')
@@ -29,14 +35,9 @@ export default async function ProviderDetail({
     .single()
 
   if (pErr || !provider) {
-    return (
-      <div className="container py-10">
-        Provider not found.
-      </div>
-    )
+    return <div className="container py-10">Provider not found.</div>
   }
 
-  // 2) Clinicians for this practice
   const { data: clinicians, error: cErr } = await supabase
     .from('clinicians')
     .select(
@@ -47,7 +48,6 @@ export default async function ProviderDetail({
 
   return (
     <div className="container py-8 space-y-6">
-      {/* Header / hero */}
       <div className="flex items-start gap-6">
         {provider.logo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -61,19 +61,30 @@ export default async function ProviderDetail({
         <div className="min-w-0">
           <h1 className="text-3xl font-bold">{provider.name ?? provider.slug}</h1>
           {provider.description ? (
-            <p className="text-slate-600 mt-2 max-w-2xl">{provider.description}</p>
+            <p className="text-slate-600 mt-2 max-w-2xl">
+              {provider.description}
+            </p>
           ) : null}
 
           <div className="mt-3 text-sm text-slate-700 space-y-1">
             {provider.address && (
-              <div>{provider.address}{provider.city ? `, ${provider.city}` : ''}{provider.state ? `, ${provider.state}` : ''}{provider.zip ? ` ${provider.zip}` : ''}</div>
+              <div>
+                {provider.address}
+                {provider.city ? `, ${provider.city}` : ''}
+                {provider.state ? `, ${provider.state}` : ''}
+                {provider.zip ? ` ${provider.zip}` : ''}
+              </div>
             )}
             {provider.phone && <div>{formatPhone(provider.phone)}</div>}
             {provider.website && (
               <div>
                 <a
                   className="text-blue-600 hover:underline"
-                  href={/^https?:\/\//i.test(provider.website) ? provider.website : `https://${provider.website}`}
+                  href={
+                    /^https?:\/\//i.test(provider.website)
+                      ? provider.website
+                      : `https://${provider.website}`
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -90,13 +101,16 @@ export default async function ProviderDetail({
         </div>
       </div>
 
-      {/* Clinicians */}
       <div className="space-y-3">
         <h2 className="text-2xl font-semibold">Clinicians</h2>
         {cErr ? (
-          <div className="text-red-600 text-sm">Error loading clinicians: {cErr.message}</div>
+          <div className="text-red-600 text-sm">
+            Error loading clinicians: {cErr.message}
+          </div>
         ) : !clinicians || clinicians.length === 0 ? (
-          <div className="text-slate-600">No clinicians listed for this practice yet.</div>
+          <div className="text-slate-600">
+            No clinicians listed for this practice yet.
+          </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {clinicians.map((c) => (
