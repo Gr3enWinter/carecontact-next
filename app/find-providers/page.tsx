@@ -16,41 +16,11 @@ function whereLike(col: string, val?: string) {
 
 export const dynamic = 'force-dynamic'
 
-export default async function ProvidersPage({
-  searchParams,
-}: {
-  searchParams: SearchParams
-}) {
-  // guard: env vars for server-side client
-  const srvUrl = process.env.SUPABASE_URL
-  const srvKey =
-    process.env.SUPABASE_SERVICE_ROLE ?? process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!srvUrl || !srvKey) {
-    return (
-      <div className="container py-10">
-        <h1 className="text-3xl font-bold mb-4">Find Providers</h1>
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
-          Missing Supabase server env vars. Please set
-          {' '}
-          <code>SUPABASE_URL</code> and
-          {' '}
-          <code>SUPABASE_SERVICE_ROLE</code>
-          {' '}
-          (or
-          {' '}
-          <code>SUPABASE_SERVICE_ROLE_KEY</code>
-          ) in Vercel settings and redeploy.
-        </div>
-      </div>
-    )
-  }
-
+export default async function ProvidersPage({ searchParams }: { searchParams: SearchParams }) {
   const supa = adminClient()
-
   let query = supa
     .from('providers')
-    .select('id,name,phone,email,address,city,state,zip,website,services,featured,slug,logo_url,description')
+    .select('id,name,phone,email,address,city,state,zip,website,services,featured,description,logo_url')
     .order('featured', { ascending: false })
     .order('name', { ascending: true })
     .limit(100)
@@ -63,29 +33,24 @@ export default async function ProvidersPage({
   if (likeSvc) query = query.ilike(likeSvc.col, likeSvc.val)
 
   const { data, error } = await query
+  if (error) {
+    return <div className="container py-10">Error loading providers.</div>
+  }
+
+  // show only rows with a real signal (avoid directory cruft)
+  const rows = (data || []).filter(
+    (r: any) => r.website && (r.phone || r.city || r.state || r.description)
+  )
 
   // fetch distinct states/cities for filters
-  const { data: states } = await supa
-    .from('providers')
-    .select('state')
-    .not('state', 'is', null)
-  const { data: cities } = await supa
-    .from('providers')
-    .select('city')
-    .not('city', 'is', null)
-
-  const unique = (arr: any[] | null, key: string) =>
-    Array.from(new Set((arr || []).map((r: any) => r[key]).filter(Boolean))).sort()
+  const { data: states } = await supa.from('providers').select('state').not('state', 'is', null)
+  const { data: cities } = await supa.from('providers').select('city').not('city', 'is', null)
+  const unique = (arr: any[], key: string) =>
+    Array.from(new Set((arr || []).map((r) => r[key]).filter(Boolean))).sort()
 
   return (
     <div className="container py-10">
       <h1 className="text-3xl font-bold mb-4">Find Providers</h1>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded mb-4">
-          Error loading providers: {error.message}
-        </div>
-      )}
 
       <form className="card mb-6 grid grid-cols-1 md:grid-cols-4 gap-3" method="get">
         <div>
@@ -96,7 +61,7 @@ export default async function ProvidersPage({
           <label>State</label>
           <select name="state" defaultValue={searchParams.state || ''}>
             <option value="">Any</option>
-            {unique(states, 'state').map((s: string) => (
+            {unique(states || [], 'state').map((s: string) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -107,7 +72,7 @@ export default async function ProvidersPage({
           <label>City</label>
           <select name="city" defaultValue={searchParams.city || ''}>
             <option value="">Any</option>
-            {unique(cities, 'city').map((c: string) => (
+            {unique(cities || [], 'city').map((c: string) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -116,11 +81,7 @@ export default async function ProvidersPage({
         </div>
         <div>
           <label>Service</label>
-          <input
-            name="service"
-            defaultValue={searchParams.service || ''}
-            placeholder="home care, assisted…"
-          />
+          <input name="service" defaultValue={searchParams.service || ''} placeholder="home care, assisted…" />
         </div>
         <div className="md:col-span-4">
           <button className="btn btn-primary">Apply filters</button>
@@ -128,14 +89,10 @@ export default async function ProvidersPage({
       </form>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {(data || []).map((p: any) => (
+        {rows.map((p: any) => (
           <ProviderCard key={p.id} p={p} />
         ))}
       </div>
-
-      {!error && (data || []).length === 0 && (
-        <div className="mt-6 text-slate-600">No providers match your filters (or table is empty).</div>
-      )}
     </div>
   )
 }

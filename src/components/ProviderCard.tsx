@@ -1,61 +1,58 @@
 // src/components/ProviderCard.tsx
-'use client'
+import React from 'react'
 
-type Provider = {
-  id: string | number
-  slug?: string | null
-  name: string
-  description?: string | null
-  logo_url?: string | null
-  website?: string | null
-  phone?: string | null
-  email?: string | null
-  address?: string | null
-  city?: string | null
-  state?: string | null
-  zip?: string | null
-  services?: string | null
-}
+const trim = (s?: string | null, n = 180) =>
+  s ? (s.length > n ? s.slice(0, n - 1) + '…' : s) : ''
 
-function initials(s: string) {
-  return s.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
-}
+const fmtPhone = (p?: string | null) =>
+  p && /^\d{10}$/.test(p) ? `(${p.slice(0, 3)}) ${p.slice(3, 6)}-${p.slice(6)}` : null
 
-export default function ProviderCard({ p }: { p: Provider }) {
-  const loc = [p.city, p.state].filter(Boolean).join(', ')
-  const desc = (p.description || '').replace(/\s+/g, ' ').slice(0, 160)
+export default function ProviderCard({ p }: { p: any }) {
+  const phoneFmt = fmtPhone(p.phone)
+  const hasLoc = p.city || p.state || p.zip
 
   return (
-    <article className="card flex items-start gap-4">
-      {/* avatar / logo */}
-      {p.logo_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={p.logo_url} alt={p.name} className="w-16 h-16 object-cover rounded-xl border" />
-      ) : (
-        <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center text-slate-600 font-semibold">
-          {initials(p.name)}
-        </div>
-      )}
+    <article className="card flex gap-4">
+      <div className="h-16 w-16 rounded-2xl overflow-hidden bg-slate-100 flex items-center justify-center">
+        {p.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={p.logo_url} alt={p.name || 'Logo'} className="h-full w-full object-cover" />
+        ) : (
+          <span className="font-bold text-slate-500">CCP</span>
+        )}
+      </div>
 
       <div className="flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold">
-            {p.slug ? <a className="hover:underline" href={`/providers/${p.slug}`}>{p.name}</a> : p.name}
-          </h3>
-          {p.services && (
-            <span className="badge ml-1">{p.services.split('|')[0]}</span>
+        <h3 className="text-lg md:text-xl font-semibold">{p.name || 'Practice'}</h3>
+
+        {hasLoc && (
+          <div className="text-slate-500 text-sm mt-1">
+            {[p.city, p.state, p.zip].filter(Boolean).join(', ')}
+          </div>
+        )}
+
+        {p.description && <p className="text-slate-700 mt-2">{trim(p.description)}</p>}
+
+        <div className="flex flex-wrap gap-2 mt-3">
+          {phoneFmt && (
+            <a className="btn" href={`tel:${p.phone}`}>Call</a>
           )}
-        </div>
-
-        {loc && <div className="text-sm text-slate-600 mt-0.5">{loc}</div>}
-
-        {desc && <p className="mt-2 text-slate-700">{desc}{p.description && p.description.length > 160 ? '…' : ''}</p>}
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {p.website && <a className="btn" href={/^https?:\/\//.test(p.website) ? p.website : `https://${p.website}`} target="_blank" rel="noopener noreferrer">Website</a>}
-          {p.phone && <a className="btn" href={`tel:${p.phone}`}>Call</a>}
-          {p.email && <a className="btn" href={`mailto:${p.email}`}>Email</a>}
-          {p.slug && <a className="btn" href={`/providers/${p.slug}`}>Details</a>}
+          {p.email && (
+            <a className="btn" href={`mailto:${p.email}`}>Email</a>
+          )}
+          {p.website && (
+            <a className="btn" target="_blank" rel="noopener noreferrer" href={p.website}>Website</a>
+          )}
+          {p.address && (
+            <a
+              className="btn"
+              target="_blank"
+              rel="noopener noreferrer"
+              href={`https://maps.google.com/?q=${encodeURIComponent(p.address)}`}
+            >
+              Map
+            </a>
+          )}
         </div>
       </div>
     </article>
