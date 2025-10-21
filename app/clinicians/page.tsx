@@ -1,23 +1,30 @@
 // app/clinicians/page.tsx
 import { createClient } from '@supabase/supabase-js'
 import ClinicianCard, { Clinician } from '../../src/components/ClinicianCard'
-export const revalidate = 60;
-export const dynamic = 'force-static';
+
+export const revalidate = 60
+export const dynamic = 'force-static'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+)
 
 export default async function CliniciansPage() {
   const { data, error } = await supabase
     .from('clinicians')
-    .select('practice_slug,slug,name,role,profile_url,photo_url,specialties,languages,accepting_new_patients,last_seen_at')
+    .select(
+      'practice_slug,slug,name,role,profile_url,photo_url,specialties,languages,accepting_new_patients,last_seen_at,booking_url'
+    )
     .order('last_seen_at', { ascending: false })
-    .limit(60);
+    .limit(60)
 
   if (error) {
-    return <div className="container py-10">Error: {error.message}</div>;
+    return (
+      <div className="container py-10">
+        Error: {error.message}
+      </div>
+    )
   }
 
   return (
@@ -34,6 +41,5 @@ export default async function CliniciansPage() {
         </div>
       )}
     </div>
-  );
+  )
 }
-

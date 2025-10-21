@@ -1,55 +1,49 @@
-// src/components/ClinicianCard.tsx
+'use client';
+
 export type Clinician = {
-  practice_slug: string
-  slug: string
-  name: string
-  role: string | null
-  profile_url: string | null
-  photo_url: string | null
-  specialties: string[] | null
-  languages: string[] | null
-  accepting_new_patients: boolean | null
-  booking_url: string | null
-}
+  practice_slug: string | null;
+  slug: string;
+  name: string;
+  role?: string | null;
+  profile_url?: string | null;
+  photo_url?: string | null;
+  specialties?: string[] | null;
+  languages?: string[] | null;
+  accepting_new_patients?: boolean | null;
+  last_seen_at?: string | null;
+  booking_url?: string | null;  // <-- make optional
+};
 
 export default function ClinicianCard({ c }: { c: Clinician }) {
   return (
-    <article className="rounded-2xl border bg-white overflow-hidden shadow-sm flex gap-4 p-4">
-      <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-100 border shrink-0">
+    <article className="card flex items-center gap-4">
+      <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
         {c.photo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={c.photo_url} alt={c.name} className="w-full h-full object-cover" loading="lazy" />
-        ) : null}
+          <img src={c.photo_url} alt={c.name} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-slate-400 text-sm">No photo</span>
+        )}
       </div>
-      <div className="space-y-1">
-        <div className="text-lg font-semibold">{c.name}</div>
-        {c.role ? <div className="text-slate-600 text-sm">{c.role}</div> : null}
-        {c.specialties?.length ? (
-          <div className="text-xs text-slate-700">
-            {c.specialties.join(' • ')}
-          </div>
-        ) : null}
-        {c.languages?.length ? (
-          <div className="text-xs text-slate-500">Languages: {c.languages.join(', ')}</div>
-        ) : null}
-        <div className="flex flex-wrap gap-2 pt-2">
-          {c.accepting_new_patients ? (
-            <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 border border-green-200">
-              Accepting new patients
-            </span>
-          ) : null}
-          {c.booking_url ? (
-            <a className="btn btn-primary" href={c.booking_url} target="_blank" rel="noopener noreferrer">
-              Book
-            </a>
-          ) : null}
-          {c.profile_url ? (
-            <a className="btn" href={c.profile_url} target="_blank" rel="noopener noreferrer">
+
+      <div className="min-w-0">
+        <div className="font-semibold truncate">{c.name}</div>
+        <div className="text-sm text-slate-600 truncate">
+          {c.role ?? 'Clinician'} {c.specialties?.length ? `• ${c.specialties.join(', ')}` : ''}
+        </div>
+        <div className="flex gap-3 text-sm">
+          {c.profile_url && (
+            <a className="text-blue-600 hover:underline" href={c.profile_url} target="_blank" rel="noopener noreferrer">
               Profile
             </a>
-          ) : null}
+          )}
+          {c.booking_url && (
+            <a className="text-blue-600 hover:underline" href={c.booking_url} target="_blank" rel="noopener noreferrer">
+              Book
+            </a>
+          )}
         </div>
       </div>
     </article>
-  )
+  );
 }
