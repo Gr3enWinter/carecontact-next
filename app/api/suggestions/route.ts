@@ -2,8 +2,6 @@
 import { NextResponse } from 'next/server';
 import { adminClient } from '../../../src/lib/supabaseServer';
 
-const PHONE = /(\d{10})|(\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/;
-
 function normPhone(p?: string|null) {
   if (!p) return null;
   const digits = p.replace(/\D/g,'');
@@ -16,7 +14,7 @@ function cleanUrl(u?: string|null) {
   const t = u.trim();
   try {
     const url = new URL(/^https?:\/\//i.test(t) ? t : `https://${t}`);
-    url.search = ''; // strip trackers
+    url.search = '';
     return url.toString();
   } catch { return null; }
 }
@@ -28,13 +26,11 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const honeypot = (body?.company || '').toString().trim();
-    if (honeypot) {
-      // silently accept
-      return new NextResponse(null, { status: 204 });
-    }
+    if (honeypot) return new NextResponse(null, { status: 204 });
 
-    const kind = (body?.kind === 'clinician') ? 'clinician' : 'provider';
-    const payload = {
+    const kind: 'provider'|'clinician' = (body?.kind === 'clinician') ? 'clinician' : 'provider';
+
+    const payload: any = {
       name: (body?.name || '').toString().slice(0, 200),
       website: cleanUrl(body?.website),
       phone: normPhone(body?.phone),
@@ -47,6 +43,12 @@ export async function POST(req: Request) {
       notes: (body?.notes || '').toString().slice(0, 1000) || null,
     };
 
+    if (kind === 'clinician') {
+      payload.practice_website = cleanUrl(body?.practice_website);
+      payload.profile_url = cleanUrl(body?.profile_url);
+      payload.photo_url = cleanUrl(body?.photo_url);
+    }
+
     if (!payload.name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
@@ -55,20 +57,16 @@ export async function POST(req: Request) {
     }
 
     const supa = adminClient();
-    const { error } = await supa
-      .from('suggestions')
-      .insert({
-        kind,
-        payload,
-        source_ip: ip,
-        user_agent: ua,
-      });
-
+    const { error } = await supa.from('suggestions').insert({
+      kind,
+      payload,
+      source_ip: ip,
+      user_agent: ua,
+    });
     if (error) {
       console.error('suggestions insert error', error);
       return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
-
     return NextResponse.json({ ok: true });
   } catch (e:any) {
     return NextResponse.json({ error: e?.message || 'Failed' }, { status: 500 });
