@@ -18,16 +18,16 @@ export default function SuggestPage() {
 
     const fd = new FormData(e.currentTarget);
 
-    // honeypot: if filled, silently succeed to confuse bots
+    // honeypot
     const trap = String(fd.get('company') || '').trim();
     if (trap) {
       setLoading(false);
-      setOk('Thanks!'); // pretend success
+      setOk('Thanks!');
       (e.target as HTMLFormElement).reset();
       return;
     }
 
-    const payload = {
+    const payload: any = {
       kind: fd.get('kind') as Kind,
       name: String(fd.get('name') || '').trim(),
       website: String(fd.get('website') || '').trim(),
@@ -41,13 +41,19 @@ export default function SuggestPage() {
       notes: String(fd.get('notes') || '').trim(),
     };
 
+    if ((fd.get('kind') as Kind) === 'clinician') {
+      payload.practice_website = String(fd.get('practice_website') || '').trim();
+      payload.profile_url = String(fd.get('profile_url') || '').trim();
+      payload.photo_url = String(fd.get('photo_url') || '').trim();
+    }
+
     try {
       const res = await fetch('/api/suggestions', {
         method: 'POST',
         headers: {'content-type':'application/json'},
         body: JSON.stringify(payload),
       });
-      const j = await res.json();
+      const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || 'Failed');
       setOk('Thanks! We’ll review and add it soon.');
       (e.target as HTMLFormElement).reset();
@@ -61,9 +67,7 @@ export default function SuggestPage() {
   return (
     <div className="container py-10 max-w-3xl">
       <h1 className="text-3xl font-bold mb-2">Suggest a {kind === 'provider' ? 'Provider' : 'Doctor'}</h1>
-      <p className="text-slate-600 mb-6">
-        See something missing? Send it our way. We verify suggestions before publishing.
-      </p>
+      <p className="text-slate-600 mb-6">We verify suggestions before publishing.</p>
 
       <form onSubmit={onSubmit} className="space-y-4 card p-6">
         {/* kind toggle */}
@@ -87,12 +91,29 @@ export default function SuggestPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium">Name *</label>
-            <input name="name" required placeholder="Business or doctor's name" />
+            <input name="name" required placeholder={kind==='provider' ? 'Business/Practice name' : 'Doctor’s name'} />
           </div>
           <div>
             <label className="block text-sm font-medium">Website</label>
             <input name="website" type="url" placeholder="https://example.com" />
           </div>
+
+          {kind === 'clinician' && (
+            <>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium">Practice Website (or practice page)</label>
+                <input name="practice_website" type="url" placeholder="https://communitycare.com/practices/..." />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium">Profile URL</label>
+                <input name="profile_url" type="url" placeholder="https://example.com/doctors/jane-doe/" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium">Photo URL</label>
+                <input name="photo_url" type="url" placeholder="https://example.com/images/jane.jpg" />
+              </div>
+            </>
+          )}
 
           <div>
             <label className="block text-sm font-medium">Phone</label>
